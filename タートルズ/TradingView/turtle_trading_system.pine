@@ -1,0 +1,249 @@
+//@version=5
+// タートルズ・トレーディングシステム インジケーター (TradingView / Pine Script v5)
+// リチャード・デニス「タートル流トレーディング規則」の
+// N(ボラティリティ) / 20・55日ブレイクアウト / 0.5N毎ピラミッディング / 2Nストップ / 10・20日エグジット
+// をチャート上に再現する「シグナル・ダッシュボード」インジケーター。
+// 発注は行わない(自動売買ではない)。エントリー・追加・撤退のタイミングと推奨ロットを表示する。
+indicator("タートルズ・トレーディングシステム", shorttitle="Turtle System", overlay=true, max_lines_count=200, max_labels_count=200, max_boxes_count=200)
+
+// ============================== 入力 ==============================
+grp_sys = "システム設定"
+useSystem1 = input.bool(true, "System1 を使う(20日ブレイク / 10日エグジット)", group=grp_sys)
+useSystem2 = input.bool(false, "System2 を使う(55日ブレイク / 20日エグジット)", group=grp_sys)
+whipsawFilter = input.bool(true, "System1: 直前のブレイクが勝ちなら次のシグナルをスキップ", group=grp_sys)
+
+grp_n = "N (ボラティリティ)"
+nLength = input.int(20, "Nの期間", minval=2, group=grp_n)
+
+grp_risk = "資金管理"
+accountBalance   = input.float(100950.0, "口座残高(口座通貨)", minval=0, group=grp_risk)
+riskPerUnitPct   = input.float(0.25, "1ユニットあたりリスク(% of 残高)", minval=0.01, step=0.05, group=grp_risk)
+maxUnits         = input.int(3, "最大ユニット数", minval=1, maxval=4, group=grp_risk)
+pointValuePerLot = input.float(100.0, "1ロットが価格1動いた時の損益", tooltip="例: GOLD(XAUUSD)標準100ozロットなら100。銘柄・ブローカーごとに確認してください。", group=grp_risk)
+dailyLossLimit   = input.float(1000.0, "1日の最大許容損失(参考表示のみ)", group=grp_risk)
+
+grp_vis = "表示"
+showChannels  = input.bool(true, "ブレイクアウトチャネルを表示", group=grp_vis)
+showStops     = input.bool(true, "ストップラインを表示", group=grp_vis)
+showDashboard = input.bool(true, "ダッシュボードを表示", group=grp_vis)
+
+// ============================== N ==============================
+// N = ATR(20) 。Wilderの平滑化(19/20の重み)で ta.atr() と同一の計算。
+nValue = ta.atr(nLength)
+
+// ============================== チャネル ==============================
+// 当日足を含めないよう [1] シフトした系列に対して highest/lowest を取る。
+entryLen1 = 20
+exitLen1  = 10
+entryLen2 = 55
+exitLen2  = 20
+
+upper20 = ta.highest(high[1], entryLen1)
+lower20 = ta.lowest(low[1], entryLen1)
+exitHigh10 = ta.highest(high[1], exitLen1)
+exitLow10  = ta.lowest(low[1], exitLen1)
+
+upper55 = ta.highest(high[1], entryLen2)
+lower55 = ta.lowest(low[1], entryLen2)
+exitHigh20 = ta.highest(high[1], exitLen2)
+exitLow20  = ta.lowest(low[1], exitLen2)
+
+// ============================== System1 状態管理 ==============================
+var int s1_pos = 0          // 0=ノーポジ, 1=ロング, -1=ショート
+var int s1_units = 0
+var float[] s1_entries = array.new_float(0)
+var float s1_stop = na
+var string s1_lastResult = ""   // "win" / "loss" / ""
+
+bool s1_buySig = false
+bool s1_sellSig = false
+float s1_addPx = na
+float s1_exitPx = na
+
+if useSystem1 and not na(upper20) and not na(nValue)
+    if s1_pos == 0
+        canBuy  = high >= upper20 and (not whipsawFilter or s1_lastResult != "win")
+        canSell = low  <= lower20 and (not whipsawFilter or s1_lastResult != "win")
+        if canBuy
+            s1_pos := 1
+            s1_units := 1
+            array.clear(s1_entries)
+            array.push(s1_entries, upper20)
+            s1_stop := upper20 - 2 * nValue
+            s1_buySig := true
+        else if canSell
+            s1_pos := -1
+            s1_units := 1
+            array.clear(s1_entries)
+            array.push(s1_entries, lower20)
+            s1_stop := lower20 + 2 * nValue
+            s1_sellSig := true
+    else if s1_pos == 1
+        lastEntry = array.get(s1_entries, array.size(s1_entries) - 1)
+        addLevel = lastEntry + 0.5 * nValue
+        if s1_units < maxUnits and high >= addLevel
+            s1_units += 1
+            array.push(s1_entries, addLevel)
+            s1_stop := addLevel - 2 * nValue
+            s1_addPx := high
+        if low <= s1_stop or low <= exitLow10
+            exitPrice = math.min(low, s1_stop)
+            firstEntry = array.get(s1_entries, 0)
+            s1_lastResult := exitPrice > firstEntry ? "win" : "loss"
+            s1_pos := 0
+            s1_units := 0
+            array.clear(s1_entries)
+            s1_stop := na
+            s1_exitPx := exitPrice
+    else if s1_pos == -1
+        lastEntry = array.get(s1_entries, array.size(s1_entries) - 1)
+        addLevel = lastEntry - 0.5 * nValue
+        if s1_units < maxUnits and low <= addLevel
+            s1_units += 1
+            array.push(s1_entries, addLevel)
+            s1_stop := addLevel + 2 * nValue
+            s1_addPx := low
+        if high >= s1_stop or high >= exitHigh10
+            exitPrice = math.max(high, s1_stop)
+            firstEntry = array.get(s1_entries, 0)
+            s1_lastResult := exitPrice < firstEntry ? "win" : "loss"
+            s1_pos := 0
+            s1_units := 0
+            array.clear(s1_entries)
+            s1_stop := na
+            s1_exitPx := exitPrice
+
+// ============================== System2 状態管理(勝敗フィルタなし・全シグナル採用) ==============================
+var int s2_pos = 0
+var int s2_units = 0
+var float[] s2_entries = array.new_float(0)
+var float s2_stop = na
+
+bool s2_buySig = false
+bool s2_sellSig = false
+float s2_addPx = na
+float s2_exitPx = na
+
+if useSystem2 and not na(upper55) and not na(nValue)
+    if s2_pos == 0
+        if high >= upper55
+            s2_pos := 1
+            s2_units := 1
+            array.clear(s2_entries)
+            array.push(s2_entries, upper55)
+            s2_stop := upper55 - 2 * nValue
+            s2_buySig := true
+        else if low <= lower55
+            s2_pos := -1
+            s2_units := 1
+            array.clear(s2_entries)
+            array.push(s2_entries, lower55)
+            s2_stop := lower55 + 2 * nValue
+            s2_sellSig := true
+    else if s2_pos == 1
+        lastEntry2 = array.get(s2_entries, array.size(s2_entries) - 1)
+        addLevel2 = lastEntry2 + 0.5 * nValue
+        if s2_units < maxUnits and high >= addLevel2
+            s2_units += 1
+            array.push(s2_entries, addLevel2)
+            s2_stop := addLevel2 - 2 * nValue
+            s2_addPx := high
+        if low <= s2_stop or low <= exitLow20
+            s2_exitPx := math.min(low, s2_stop)
+            s2_pos := 0
+            s2_units := 0
+            array.clear(s2_entries)
+            s2_stop := na
+    else if s2_pos == -1
+        lastEntry2 = array.get(s2_entries, array.size(s2_entries) - 1)
+        addLevel2 = lastEntry2 - 0.5 * nValue
+        if s2_units < maxUnits and low <= addLevel2
+            s2_units += 1
+            array.push(s2_entries, addLevel2)
+            s2_stop := addLevel2 + 2 * nValue
+            s2_addPx := low
+        if high >= s2_stop or high >= exitHigh20
+            s2_exitPx := math.max(high, s2_stop)
+            s2_pos := 0
+            s2_units := 0
+            array.clear(s2_entries)
+            s2_stop := na
+
+// ============================== 描画 ==============================
+plot(showChannels and useSystem1 ? upper20 : na, "System1 20日高値", color=color.new(color.lime, 0))
+plot(showChannels and useSystem1 ? lower20 : na, "System1 20日安値", color=color.new(color.red, 0))
+plot(showChannels and useSystem1 ? exitHigh10 : na, "System1 10日高値(エグジット)", color=color.new(color.red, 60), style=plot.style_circles)
+plot(showChannels and useSystem1 ? exitLow10 : na, "System1 10日安値(エグジット)", color=color.new(color.lime, 60), style=plot.style_circles)
+
+plot(showChannels and useSystem2 ? upper55 : na, "System2 55日高値", color=color.new(color.blue, 0), style=plot.style_line, linewidth=1)
+plot(showChannels and useSystem2 ? lower55 : na, "System2 55日安値", color=color.new(color.orange, 0), style=plot.style_line, linewidth=1)
+
+plot(showStops and s1_pos != 0 ? s1_stop : na, "System1 ストップ", color=color.new(color.fuchsia, 0), style=plot.style_linebr, linewidth=2)
+plot(showStops and s2_pos != 0 ? s2_stop : na, "System2 ストップ", color=color.new(color.purple, 0), style=plot.style_linebr, linewidth=2)
+
+plotshape(s1_buySig, "S1 買い", shape.triangleup, location.belowbar, color=color.lime, size=size.small, text="S1 買")
+plotshape(s1_sellSig, "S1 売り", shape.triangledown, location.abovebar, color=color.red, size=size.small, text="S1 売")
+plotshape(s1_addPx, "S1 追加", shape.circle, location.absolute, color=color.yellow, size=size.tiny)
+plotshape(s1_exitPx, "S1 撤退", shape.xcross, location.absolute, color=color.gray, size=size.tiny)
+
+plotshape(s2_buySig, "S2 買い", shape.triangleup, location.belowbar, color=color.blue, size=size.small, text="S2 買")
+plotshape(s2_sellSig, "S2 売り", shape.triangledown, location.abovebar, color=color.orange, size=size.small, text="S2 売")
+plotshape(s2_addPx, "S2 追加", shape.circle, location.absolute, color=color.aqua, size=size.tiny)
+plotshape(s2_exitPx, "S2 撤退", shape.xcross, location.absolute, color=color.gray, size=size.tiny)
+
+// ============================== アラート ==============================
+alertcondition(s1_buySig, "System1 買いシグナル", "タートルズ System1: 20日高値ブレイクで買い")
+alertcondition(s1_sellSig, "System1 売りシグナル", "タートルズ System1: 20日安値ブレイクで売り")
+alertcondition(not na(s1_addPx), "System1 追加シグナル", "タートルズ System1: 0.5N到達でユニット追加")
+alertcondition(not na(s1_exitPx), "System1 撤退シグナル", "タートルズ System1: ストップまたは10日逆抜けで撤退")
+alertcondition(s2_buySig, "System2 買いシグナル", "タートルズ System2: 55日高値ブレイクで買い")
+alertcondition(s2_sellSig, "System2 売りシグナル", "タートルズ System2: 55日安値ブレイクで売り")
+alertcondition(not na(s2_addPx), "System2 追加シグナル", "タートルズ System2: 0.5N到達でユニット追加")
+alertcondition(not na(s2_exitPx), "System2 撤退シグナル", "タートルズ System2: ストップまたは20日逆抜けで撤退")
+
+// ============================== ダッシュボード ==============================
+riskAmountPerUnit = accountBalance * riskPerUnitPct / 100
+suggestedLots = (nValue > 0) ? riskAmountPerUnit / (nValue * pointValuePerLot) : na
+totalRiskPctAtMax = riskPerUnitPct * maxUnits
+
+posText(pos) => pos == 1 ? "ロング" : pos == -1 ? "ショート" : "ノーポジ"
+
+var table dash = table.new(position.top_right, 2, 12, border_width=1, border_color=color.gray, bgcolor=color.new(color.black, 15))
+if showDashboard and barstate.islast
+    table.cell(dash, 0, 0, "タートルズ ダッシュボード", text_color=color.white, bgcolor=color.new(color.blue, 0), text_size=size.small)
+    table.merge_cells(dash, 0, 0, 1, 0)
+
+    table.cell(dash, 0, 1, "N (ATR" + str.tostring(nLength) + ")", text_color=color.white, text_size=size.tiny)
+    table.cell(dash, 1, 1, str.tostring(nValue, format.mintick), text_color=color.white, text_size=size.tiny)
+
+    table.cell(dash, 0, 2, "推奨ロット(次エントリー)", text_color=color.white, text_size=size.tiny)
+    table.cell(dash, 1, 2, na(suggestedLots) ? "-" : str.tostring(suggestedLots, "#.####"), text_color=color.yellow, text_size=size.tiny)
+
+    table.cell(dash, 0, 3, "1ユニット許容損失", text_color=color.white, text_size=size.tiny)
+    table.cell(dash, 1, 3, str.tostring(riskAmountPerUnit, "#.##"), text_color=color.white, text_size=size.tiny)
+
+    table.cell(dash, 0, 4, "最大時の総リスク%", text_color=color.white, text_size=size.tiny)
+    table.cell(dash, 1, 4, str.tostring(totalRiskPctAtMax, "#.##") + "%", text_color=color.white, text_size=size.tiny)
+
+    table.cell(dash, 0, 5, "1日の最大許容損失", text_color=color.white, text_size=size.tiny)
+    table.cell(dash, 1, 5, str.tostring(dailyLossLimit, "#.##"), text_color=color.white, text_size=size.tiny)
+
+    table.cell(dash, 0, 6, "System1 状態", text_color=color.lime, text_size=size.tiny)
+    table.cell(dash, 1, 6, posText(s1_pos) + " (" + str.tostring(s1_units) + "u)", text_color=color.white, text_size=size.tiny)
+
+    table.cell(dash, 0, 7, "System1 ストップ", text_color=color.lime, text_size=size.tiny)
+    table.cell(dash, 1, 7, na(s1_stop) ? "-" : str.tostring(s1_stop, format.mintick), text_color=color.white, text_size=size.tiny)
+
+    nextAdd1 = s1_pos != 0 and array.size(s1_entries) > 0 ? array.get(s1_entries, array.size(s1_entries) - 1) + (s1_pos == 1 ? 0.5 : -0.5) * nValue : na
+    table.cell(dash, 0, 8, "System1 次の追加水準", text_color=color.lime, text_size=size.tiny)
+    table.cell(dash, 1, 8, (na(nextAdd1) or s1_units >= maxUnits) ? "-" : str.tostring(nextAdd1, format.mintick), text_color=color.white, text_size=size.tiny)
+
+    table.cell(dash, 0, 9, "System2 状態", text_color=color.blue, text_size=size.tiny)
+    table.cell(dash, 1, 9, posText(s2_pos) + " (" + str.tostring(s2_units) + "u)", text_color=color.white, text_size=size.tiny)
+
+    table.cell(dash, 0, 10, "System2 ストップ", text_color=color.blue, text_size=size.tiny)
+    table.cell(dash, 1, 10, na(s2_stop) ? "-" : str.tostring(s2_stop, format.mintick), text_color=color.white, text_size=size.tiny)
+
+    nextAdd2 = s2_pos != 0 and array.size(s2_entries) > 0 ? array.get(s2_entries, array.size(s2_entries) - 1) + (s2_pos == 1 ? 0.5 : -0.5) * nValue : na
+    table.cell(dash, 0, 11, "System2 次の追加水準", text_color=color.blue, text_size=size.tiny)
+    table.cell(dash, 1, 11, (na(nextAdd2) or s2_units >= maxUnits) ? "-" : str.tostring(nextAdd2, format.mintick), text_color=color.white, text_size=size.tiny)

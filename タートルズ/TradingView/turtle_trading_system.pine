@@ -71,6 +71,7 @@ if useSystem1 and not na(upper20) and not na(nValue)
             array.push(s1_entries, upper20)
             s1_stop := upper20 - 2 * nValue
             s1_buySig := true
+            alert("タートルズ S1 買い " + syminfo.ticker + " " + timeframe.period + " @ " + str.tostring(close), alert.freq_once_per_bar)
         else if canSell
             s1_pos := -1
             s1_units := 1
@@ -78,6 +79,7 @@ if useSystem1 and not na(upper20) and not na(nValue)
             array.push(s1_entries, lower20)
             s1_stop := lower20 + 2 * nValue
             s1_sellSig := true
+            alert("タートルズ S1 売り " + syminfo.ticker + " " + timeframe.period + " @ " + str.tostring(close), alert.freq_once_per_bar)
     else if s1_pos == 1
         lastEntry = array.get(s1_entries, array.size(s1_entries) - 1)
         addLevel = lastEntry + 0.5 * nValue
@@ -86,6 +88,7 @@ if useSystem1 and not na(upper20) and not na(nValue)
             array.push(s1_entries, addLevel)
             s1_stop := addLevel - 2 * nValue
             s1_addPx := high
+            alert("タートルズ S1 追加(ロング) " + syminfo.ticker + " " + timeframe.period + " @ " + str.tostring(high), alert.freq_once_per_bar)
         if low <= s1_stop or low <= exitLow10
             exitPrice = math.min(low, s1_stop)
             firstEntry = array.get(s1_entries, 0)
@@ -95,6 +98,7 @@ if useSystem1 and not na(upper20) and not na(nValue)
             array.clear(s1_entries)
             s1_stop := na
             s1_exitPx := exitPrice
+            alert("タートルズ S1 撤退(ロング) " + syminfo.ticker + " " + timeframe.period + " @ " + str.tostring(exitPrice), alert.freq_once_per_bar)
     else if s1_pos == -1
         lastEntry = array.get(s1_entries, array.size(s1_entries) - 1)
         addLevel = lastEntry - 0.5 * nValue
@@ -103,6 +107,7 @@ if useSystem1 and not na(upper20) and not na(nValue)
             array.push(s1_entries, addLevel)
             s1_stop := addLevel + 2 * nValue
             s1_addPx := low
+            alert("タートルズ S1 追加(ショート) " + syminfo.ticker + " " + timeframe.period + " @ " + str.tostring(low), alert.freq_once_per_bar)
         if high >= s1_stop or high >= exitHigh10
             exitPrice = math.max(high, s1_stop)
             firstEntry = array.get(s1_entries, 0)
@@ -112,6 +117,7 @@ if useSystem1 and not na(upper20) and not na(nValue)
             array.clear(s1_entries)
             s1_stop := na
             s1_exitPx := exitPrice
+            alert("タートルズ S1 撤退(ショート) " + syminfo.ticker + " " + timeframe.period + " @ " + str.tostring(exitPrice), alert.freq_once_per_bar)
 
 // ============================== System2 状態管理(勝敗フィルタなし・全シグナル採用) ==============================
 var int s2_pos = 0
@@ -133,6 +139,7 @@ if useSystem2 and not na(upper55) and not na(nValue)
             array.push(s2_entries, upper55)
             s2_stop := upper55 - 2 * nValue
             s2_buySig := true
+            alert("タートルズ S2 買い " + syminfo.ticker + " " + timeframe.period + " @ " + str.tostring(close), alert.freq_once_per_bar)
         else if low <= lower55
             s2_pos := -1
             s2_units := 1
@@ -140,6 +147,7 @@ if useSystem2 and not na(upper55) and not na(nValue)
             array.push(s2_entries, lower55)
             s2_stop := lower55 + 2 * nValue
             s2_sellSig := true
+            alert("タートルズ S2 売り " + syminfo.ticker + " " + timeframe.period + " @ " + str.tostring(close), alert.freq_once_per_bar)
     else if s2_pos == 1
         lastEntry2 = array.get(s2_entries, array.size(s2_entries) - 1)
         addLevel2 = lastEntry2 + 0.5 * nValue
@@ -148,8 +156,10 @@ if useSystem2 and not na(upper55) and not na(nValue)
             array.push(s2_entries, addLevel2)
             s2_stop := addLevel2 - 2 * nValue
             s2_addPx := high
+            alert("タートルズ S2 追加(ロング) " + syminfo.ticker + " " + timeframe.period + " @ " + str.tostring(high), alert.freq_once_per_bar)
         if low <= s2_stop or low <= exitLow20
             s2_exitPx := math.min(low, s2_stop)
+            alert("タートルズ S2 撤退(ロング) " + syminfo.ticker + " " + timeframe.period + " @ " + str.tostring(s2_exitPx), alert.freq_once_per_bar)
             s2_pos := 0
             s2_units := 0
             array.clear(s2_entries)
@@ -162,8 +172,10 @@ if useSystem2 and not na(upper55) and not na(nValue)
             array.push(s2_entries, addLevel2)
             s2_stop := addLevel2 + 2 * nValue
             s2_addPx := low
+            alert("タートルズ S2 追加(ショート) " + syminfo.ticker + " " + timeframe.period + " @ " + str.tostring(low), alert.freq_once_per_bar)
         if high >= s2_stop or high >= exitHigh20
             s2_exitPx := math.max(high, s2_stop)
+            alert("タートルズ S2 撤退(ショート) " + syminfo.ticker + " " + timeframe.period + " @ " + str.tostring(s2_exitPx), alert.freq_once_per_bar)
             s2_pos := 0
             s2_units := 0
             array.clear(s2_entries)

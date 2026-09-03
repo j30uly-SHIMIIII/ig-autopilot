@@ -108,13 +108,16 @@ for row in conn.execute('SELECT id, status, ig_media_id, scheduled_at FROM queue
 `src/alerts/red_alert_scheduler.py` が ForexFactory の経済指標カレンダー
 (公式ウィジェットが参照している公開JSONフィード)を定期的にポーリングし、
 インパクトが「赤(High)」のイベント開始 `alert_minutes_before` 分前(デフォルト5分)に
-Slack Incoming Webhook へ通知する。
+Slack Incoming Webhook / Discord Webhook へ通知する。
 
 ```bash
 source .venv/bin/activate
-cp .env.example .env   # SLACK_WEBHOOK_URL に Slack Incoming Webhook URL を設定
+cp .env.example .env   # SLACK_WEBHOOK_URL / DISCORD_WEBHOOK_URL に各WebhookのURLを設定
 python -m src.alerts.red_alert_scheduler
 ```
+
+- `SLACK_WEBHOOK_URL` と `DISCORD_WEBHOOK_URL` は両方設定すると両方に通知される(`MultiNotifier`)。
+  片方だけ設定すればそちらのみに通知される
 
 - 設定: `config/forexfactory.yaml`(タイムゾーン・アラート何分前・対象インパクト・通貨フィルタ・フィード元URL・キャッシュ有効期限)
 - `SLACK_WEBHOOK_URL` が未設定の場合は `NullNotifier` となり、Slack送信は行わずログ出力のみ

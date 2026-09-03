@@ -40,6 +40,18 @@ CREATE TABLE IF NOT EXISTS posts (
     permalink TEXT,
     published_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS calendar_alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_key TEXT NOT NULL UNIQUE,        -- country|title|event ISO datetime
+    title TEXT NOT NULL,
+    country TEXT NOT NULL,
+    event_at TEXT NOT NULL,                -- ISO 8601, tz-aware
+    alerted_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_calendar_alerts_event_at
+    ON calendar_alerts (event_at);
 """
 
 

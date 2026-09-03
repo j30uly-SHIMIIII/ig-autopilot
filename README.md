@@ -103,6 +103,28 @@ for row in conn.execute('SELECT id, status, ig_media_id, scheduled_at FROM queue
 "
 ```
 
+## ForexFactory 赤(高インパクト)イベントのSlackアラート
+
+`src/alerts/red_alert_scheduler.py` が ForexFactory の経済指標カレンダー
+(公式ウィジェットが参照している公開JSONフィード)を定期的にポーリングし、
+インパクトが「赤(High)」のイベント開始 `alert_minutes_before` 分前(デフォルト5分)に
+Slack Incoming Webhook へ通知する。
+
+```bash
+source .venv/bin/activate
+cp .env.example .env   # SLACK_WEBHOOK_URL に Slack Incoming Webhook URL を設定
+python -m src.alerts.red_alert_scheduler
+```
+
+- 設定: `config/forexfactory.yaml`(タイムゾーン・アラート何分前・対象インパクト・通貨フィルタ・フィード元URL)
+- `SLACK_WEBHOOK_URL` が未設定の場合は `NullNotifier` となり、Slack送信は行わずログ出力のみ
+- 同一イベントへの重複アラートは `data/queue.db` の `calendar_alerts` テーブルで防止するため、
+  アラート窓(`alert_minutes_before`)より短い間隔(例:毎分)でcron実行してよい
+
+```
+* * * * * cd /opt/ig-autopilot && python3 -m src.alerts.red_alert_scheduler
+```
+
 ## 主要な設計判断
 
 - **モック優先**: `create_ig_client()` は `IG_USER_ID` / `IG_ACCESS_TOKEN` が無い場合、自動的に

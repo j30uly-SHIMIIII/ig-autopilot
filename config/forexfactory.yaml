@@ -1,0 +1,20 @@
+# ForexFactory経済指標カレンダー: 赤(高インパクト)イベントのアラート設定
+
+timezone: "Asia/Tokyo"
+
+# ForexFactoryのカレンダーウィジェットが参照している公開JSONフィード
+# (HTMLはJS描画のためスクレイピングせず、同じデータ源のJSONを使う)
+feed_url: "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
+
+# イベント開始の何分前にアラートするか
+alert_minutes_before: 5
+
+# アラート対象のインパクト(ForexFactory上の色に対応): high=赤 のみがデフォルト
+impact_levels:
+  - high
+
+# 通貨で絞り込む場合は通貨コードを指定(例: ["USD", "JPY"])。空なら全通貨対象
+currencies: []
+
+# cronの実行間隔と一致させる(アラート窓(alert_minutes_before)より短くすること)
+poll_interval_minutes: 1

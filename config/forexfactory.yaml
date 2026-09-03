@@ -18,3 +18,7 @@ currencies: []
 
 # cronの実行間隔と一致させる(アラート窓(alert_minutes_before)より短くすること)
 poll_interval_minutes: 1
+
+# フィードの再取得を何分キャッシュするか(1分間隔ポーリングのたびに毎回ダウンロードすると
+# フィード側のレート制限(429)に当たるため、この間隔でのみ実際にHTTP取得する)
+cache_ttl_minutes: 5

@@ -116,8 +116,10 @@ cp .env.example .env   # SLACK_WEBHOOK_URL に Slack Incoming Webhook URL を設
 python -m src.alerts.red_alert_scheduler
 ```
 
-- 設定: `config/forexfactory.yaml`(タイムゾーン・アラート何分前・対象インパクト・通貨フィルタ・フィード元URL)
+- 設定: `config/forexfactory.yaml`(タイムゾーン・アラート何分前・対象インパクト・通貨フィルタ・フィード元URL・キャッシュ有効期限)
 - `SLACK_WEBHOOK_URL` が未設定の場合は `NullNotifier` となり、Slack送信は行わずログ出力のみ
+- カレンダーフィードは `data/forexfactory_calendar_cache.json` に `cache_ttl_minutes`(デフォルト5分)キャッシュされる。
+  毎分ポーリングのたびに毎回HTTP取得するとフィード側のレート制限(429 Too Many Requests)に当たるため
 - 同一イベントへの重複アラートは `data/queue.db` の `calendar_alerts` テーブルで防止するため、
   アラート窓(`alert_minutes_before`)より短い間隔(例:毎分)でcron実行してよい
 

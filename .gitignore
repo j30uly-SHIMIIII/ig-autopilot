@@ -8,3 +8,4 @@ venv/
 
 data/queue.db
 data/generated/
+data/forexfactory_calendar_cache.json

@@ -18,12 +18,17 @@ from zoneinfo import ZoneInfo
 
 import yaml
 
-from src.alerts.calendar_client import CalendarEvent, DEFAULT_FEED_URL, fetch_calendar_events
+from src.alerts.calendar_client import (
+    CalendarEvent,
+    DEFAULT_FEED_URL,
+    fetch_calendar_events_cached,
+)
 from src.alerts.notifier import Notifier, create_notifier
 from src.common.db import DEFAULT_DB_PATH, connect
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = REPO_ROOT / "config" / "forexfactory.yaml"
+DEFAULT_CACHE_PATH = REPO_ROOT / "data" / "forexfactory_calendar_cache.json"
 
 logger = logging.getLogger(__name__)
 
@@ -91,12 +96,15 @@ def run_once(
     impact_levels = {str(level).lower() for level in config.get("impact_levels") or ["high"]}
     currencies = config.get("currencies")
     feed_url = config.get("feed_url", DEFAULT_FEED_URL)
+    cache_ttl_seconds = config.get("cache_ttl_minutes", 5) * 60
 
     notifier = notifier or create_notifier()
     now = datetime.now(ZoneInfo(timezone))
 
     if events is None:
-        events = fetch_calendar_events(feed_url)
+        events = fetch_calendar_events_cached(
+            feed_url, cache_path=DEFAULT_CACHE_PATH, cache_ttl_seconds=cache_ttl_seconds
+        )
 
     if currencies:
         allowed = {c.upper() for c in currencies}

@@ -1,3 +1,5 @@
+import os
+import time
 from datetime import timedelta
 
 import pytest
@@ -6,6 +8,7 @@ import requests
 from src.alerts.calendar_client import (
     CalendarFetchError,
     fetch_calendar_events,
+    fetch_calendar_events_cached,
     parse_event,
     parse_events,
 )
@@ -30,9 +33,12 @@ class _FakeSession:
         self._payload = payload
         self._status_code = status_code
         self.requested_url = None
+        self.call_count = 0
 
-    def get(self, url, timeout=None):
+    def get(self, url, timeout=None, headers=None):
         self.requested_url = url
+        self.requested_headers = headers
+        self.call_count += 1
         return _FakeResponse(self._payload, self._status_code)
 
 
@@ -113,3 +119,55 @@ def test_fetch_calendar_events_raises_on_http_error():
     session = _FakeSession([_raw_event()], status_code=500)
     with pytest.raises(CalendarFetchError):
         fetch_calendar_events(session=session)
+
+
+def test_fetch_calendar_events_sends_user_agent_header():
+    session = _FakeSession([_raw_event()])
+    fetch_calendar_events(session=session)
+    assert "User-Agent" in session.requested_headers
+
+
+def test_fetch_calendar_events_cached_writes_and_reuses_cache(tmp_path):
+    cache_path = tmp_path / "cache.json"
+    session = _FakeSession([_raw_event()])
+
+    first = fetch_calendar_events_cached(cache_path=cache_path, session=session, cache_ttl_seconds=300)
+    second = fetch_calendar_events_cached(cache_path=cache_path, session=session, cache_ttl_seconds=300)
+
+    assert session.call_count == 1
+    assert [e.title for e in first] == [e.title for e in second]
+    assert cache_path.exists()
+
+
+def test_fetch_calendar_events_cached_refetches_after_ttl_expires(tmp_path):
+    cache_path = tmp_path / "cache.json"
+    session = _FakeSession([_raw_event()])
+
+    fetch_calendar_events_cached(cache_path=cache_path, session=session, cache_ttl_seconds=300)
+    old_time = time.time() - 3600
+    os.utime(cache_path, (old_time, old_time))
+    fetch_calendar_events_cached(cache_path=cache_path, session=session, cache_ttl_seconds=300)
+
+    assert session.call_count == 2
+
+
+def test_fetch_calendar_events_cached_falls_back_to_stale_cache_on_error(tmp_path):
+    cache_path = tmp_path / "cache.json"
+    good_session = _FakeSession([_raw_event()])
+    fetch_calendar_events_cached(cache_path=cache_path, session=good_session, cache_ttl_seconds=300)
+
+    old_time = time.time() - 3600
+    os.utime(cache_path, (old_time, old_time))
+    failing_session = _FakeSession([_raw_event()], status_code=429)
+
+    events = fetch_calendar_events_cached(cache_path=cache_path, session=failing_session, cache_ttl_seconds=300)
+
+    assert [e.title for e in events] == ["Non-Farm Employment Change"]
+
+
+def test_fetch_calendar_events_cached_raises_when_no_cache_and_fetch_fails(tmp_path):
+    cache_path = tmp_path / "cache.json"
+    session = _FakeSession([_raw_event()], status_code=429)
+
+    with pytest.raises(CalendarFetchError):
+        fetch_calendar_events_cached(cache_path=cache_path, session=session, cache_ttl_seconds=300)
